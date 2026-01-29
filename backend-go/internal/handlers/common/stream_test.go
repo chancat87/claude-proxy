@@ -271,3 +271,52 @@ func TestInferImplicitCacheRead(t *testing.T) {
 		})
 	}
 }
+
+// TestPatchTokensInEventWithCache 测试带缓存推断的事件修补
+func TestPatchTokensInEventWithCache(t *testing.T) {
+	extractCacheRead := func(t *testing.T, event string) float64 {
+		t.Helper()
+		for _, line := range strings.Split(event, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &data); err != nil {
+				continue
+			}
+			if usage, ok := data["usage"].(map[string]interface{}); ok {
+				if v, ok := usage["cache_read_input_tokens"].(float64); ok {
+					return v
+				}
+			}
+		}
+		return 0
+	}
+
+	t.Run("should write inferred cache_read when not present", func(t *testing.T) {
+		event := "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":20000,\"output_tokens\":100}}\n\n"
+		patched := PatchTokensInEventWithCache(event, 20000, 100, 80000, true, false, false)
+		got := extractCacheRead(t, patched)
+		if got != 80000 {
+			t.Errorf("expected cache_read_input_tokens=80000, got %v", got)
+		}
+	})
+
+	t.Run("should not overwrite existing cache_read", func(t *testing.T) {
+		event := "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":20000,\"output_tokens\":100,\"cache_read_input_tokens\":50000}}\n\n"
+		patched := PatchTokensInEventWithCache(event, 20000, 100, 80000, true, false, false)
+		got := extractCacheRead(t, patched)
+		if got != 50000 {
+			t.Errorf("expected cache_read_input_tokens=50000 (unchanged), got %v", got)
+		}
+	})
+
+	t.Run("should not write when inferredCacheRead is 0", func(t *testing.T) {
+		event := "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":20000,\"output_tokens\":100}}\n\n"
+		patched := PatchTokensInEventWithCache(event, 20000, 100, 0, false, false, false)
+		got := extractCacheRead(t, patched)
+		if got != 0 {
+			t.Errorf("expected cache_read_input_tokens=0, got %v", got)
+		}
+	})
+}

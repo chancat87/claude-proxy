@@ -12,15 +12,18 @@
   - 检测 `message_start` 与 `message_delta` 事件中 `input_tokens` 的差异
   - 触发条件：差额 > 10% 或差额 > 10000 tokens
   - 将差额自动填充到 `CacheReadInputTokens` 字段，使 token 统计更准确
+  - **下游转发支持**：推断的 `cache_read_input_tokens` 会写入 `message_delta` 事件并转发给下游客户端
   - 新增 `StreamContext.MessageStartInputTokens` 字段记录初始 token 数
   - 新增 `inferImplicitCacheRead()` 函数在流结束时执行推断
+  - 新增 `PatchTokensInEventWithCache()` 函数在修补 token 的同时写入推断的缓存值
   - **关键修复**：
     - `message_start` 的 `input_tokens` 不再累积到 `CollectedUsage.InputTokens`，确保差额计算正确
     - 使用 `originalUsageData` 传递给 `PatchMessageStartInputTokensIfNeeded`，避免误判
     - Token 修补逻辑增加隐式缓存信号检测，避免覆盖缓存命中场景下的正确低值
+    - 隐式缓存推断在转发前执行，确保下游客户端能收到推断值
   - 涉及文件：
     - `backend-go/internal/handlers/common/stream.go` - 核心逻辑实现
-    - `backend-go/internal/handlers/common/stream_test.go` - 单元测试（11 个边界场景）
+    - `backend-go/internal/handlers/common/stream_test.go` - 单元测试（14 个边界场景）
 
 ---
 

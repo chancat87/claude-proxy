@@ -268,6 +268,13 @@ func ProcessStreamEvent(
 				ctx.CollectedUsage.CacheCreation5mInputTokens > 0 ||
 				ctx.CollectedUsage.CacheCreation1hInputTokens > 0
 
+			// 在转发前执行隐式缓存推断，确保下游能收到推断的 cache_read_input_tokens
+			if !hasCacheTokens {
+				inferImplicitCacheRead(ctx, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
+				// 重新检查是否有缓存 token（可能刚被推断出来）
+				hasCacheTokens = ctx.CollectedUsage.CacheReadInputTokens > 0
+			}
+
 			// 检测隐式缓存信号：message_start 的 input_tokens 远大于最终值
 			// 这种情况下不应该用本地估算值覆盖，因为低 input_tokens 是缓存命中的正常结果
 			hasImplicitCacheSignal := ctx.MessageStartInputTokens > 0 &&
@@ -294,7 +301,8 @@ func ProcessStreamEvent(
 				ctx.CollectedUsage.OutputTokens = outputTokens
 			}
 
-			eventToSend = PatchTokensInEvent(eventToSend, inputTokens, outputTokens, hasCacheTokens, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"), ctx.LowQuality)
+			// 修补事件，包括推断的 cache_read_input_tokens
+			eventToSend = PatchTokensInEventWithCache(eventToSend, inputTokens, outputTokens, ctx.CollectedUsage.CacheReadInputTokens, hasCacheTokens, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"), ctx.LowQuality)
 			ctx.NeedTokenPatch = false
 		}
 	}
@@ -672,6 +680,72 @@ func PatchTokensInEvent(event string, estimatedInputTokens, estimatedOutputToken
 		if msg, ok := data["message"].(map[string]interface{}); ok {
 			if usage, ok := msg["usage"].(map[string]interface{}); ok {
 				patchUsageFieldsWithLog(usage, estimatedInputTokens, estimatedOutputTokens, hasCacheTokens, enableLog, "message.usage", lowQuality)
+			}
+		}
+
+		patchedJSON, err := json.Marshal(data)
+		if err != nil {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		result.WriteString("data: ")
+		result.Write(patchedJSON)
+		result.WriteString("\n")
+	}
+
+	return result.String()
+}
+
+// PatchTokensInEventWithCache 修补事件中的 token 字段，并写入推断的 cache_read_input_tokens
+// 当 inferredCacheRead > 0 且事件中没有 cache_read_input_tokens 时，将推断值写入
+func PatchTokensInEventWithCache(event string, estimatedInputTokens, estimatedOutputTokens, inferredCacheRead int, hasCacheTokens bool, enableLog bool, lowQuality bool) string {
+	var result strings.Builder
+	lines := strings.Split(event, "\n")
+
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "data: ") {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		jsonStr := strings.TrimPrefix(line, "data: ")
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		// 修补顶层 usage
+		if usage, ok := data["usage"].(map[string]interface{}); ok {
+			patchUsageFieldsWithLog(usage, estimatedInputTokens, estimatedOutputTokens, hasCacheTokens, enableLog, "顶层usage", lowQuality)
+			// 写入推断的 cache_read_input_tokens
+			if inferredCacheRead > 0 {
+				if existingCacheRead, ok := usage["cache_read_input_tokens"].(float64); !ok || existingCacheRead == 0 {
+					usage["cache_read_input_tokens"] = inferredCacheRead
+					if enableLog {
+						log.Printf("[Messages-Stream-Token] 顶层usage: 写入推断的 cache_read_input_tokens=%d", inferredCacheRead)
+					}
+				}
+			}
+		}
+
+		// 修补 message.usage
+		if msg, ok := data["message"].(map[string]interface{}); ok {
+			if usage, ok := msg["usage"].(map[string]interface{}); ok {
+				patchUsageFieldsWithLog(usage, estimatedInputTokens, estimatedOutputTokens, hasCacheTokens, enableLog, "message.usage", lowQuality)
+				// 写入推断的 cache_read_input_tokens
+				if inferredCacheRead > 0 {
+					if existingCacheRead, ok := usage["cache_read_input_tokens"].(float64); !ok || existingCacheRead == 0 {
+						usage["cache_read_input_tokens"] = inferredCacheRead
+						if enableLog {
+							log.Printf("[Messages-Stream-Token] message.usage: 写入推断的 cache_read_input_tokens=%d", inferredCacheRead)
+						}
+					}
+				}
 			}
 		}
 
