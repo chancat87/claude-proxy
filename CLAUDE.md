@@ -108,6 +108,13 @@ claude-proxy/
 - **环境变量变更**: 修改 `.env` 后需要重启服务
 - **认证**: 所有端点（除 `/health`）需要 `x-api-key` 头或 `PROXY_ACCESS_KEY`
 
+## Git 命令注意事项
+
+- 执行 `git add`/`git commit` 前确保在项目根目录
+- `git diff` 查看特定文件时使用 `--` 分隔符避免歧义：`git diff -- path/to/file`
+- 错误示例：`git diff frontend/src/file.vue`（可能报 `unknown revision` 错误）
+- 正确示例：`git diff -- frontend/src/file.vue`
+
 ## 模块文档
 
 - [backend-go/CLAUDE.md](backend-go/CLAUDE.md) - Go 后端详细文档

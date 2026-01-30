@@ -8,6 +8,15 @@
 
 ### 新增
 
+- **渠道置顶/置底功能** - 在渠道编排菜单中新增一键调整渠道位置的操作
+  - 在渠道右侧弹出菜单中添加"置顶"和"置底"选项
+  - 第一个渠道不显示"置顶"，最后一个渠道不显示"置底"
+  - 操作后立即保存到后端，复用现有 `saveOrder()` 函数
+  - 解决渠道数量较多时拖拽排序不便的问题
+  - 涉及文件：
+    - `frontend/src/components/ChannelOrchestration.vue` - 添加菜单项和处理函数
+    - `frontend/src/plugins/vuetify.ts` - 添加 `arrow-collapse-up/down` 图标
+
 - **隐式缓存读取推断** - 当上游未明确返回 `cache_read_input_tokens` 但存在显著 token 差异时，自动推断缓存命中
   - 检测 `message_start` 与 `message_delta` 事件中 `input_tokens` 的差异
   - 触发条件：差额 > 10% 或差额 > 10000 tokens

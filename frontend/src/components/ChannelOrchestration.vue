@@ -289,6 +289,18 @@
                     </template>
                     <v-list-item-title>抢优先级 (5分钟)</v-list-item-title>
                   </v-list-item>
+                  <v-list-item v-if="index > 0" :disabled="isSavingOrder" @click="moveChannelToTop(element.index)">
+                    <template #prepend>
+                      <v-icon size="small" color="primary">mdi-arrow-collapse-up</v-icon>
+                    </template>
+                    <v-list-item-title>置顶</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="index < activeChannels.length - 1" :disabled="isSavingOrder" @click="moveChannelToBottom(element.index)">
+                    <template #prepend>
+                      <v-icon size="small" color="primary">mdi-arrow-collapse-down</v-icon>
+                    </template>
+                    <v-list-item-title>置底</v-list-item-title>
+                  </v-list-item>
                   <v-divider />
                   <v-list-item v-if="element.status === 'suspended'" @click="resumeChannel(element.index)">
                     <template #prepend>
@@ -1029,6 +1041,28 @@ const saveOrder = async () => {
   } finally {
     isSavingOrder.value = false
   }
+}
+
+// 置顶渠道
+const moveChannelToTop = async (channelIndex: number) => {
+  if (isSavingOrder.value) return
+  const idx = activeChannels.value.findIndex(ch => ch.index === channelIndex)
+  if (idx <= 0) return
+
+  const [channel] = activeChannels.value.splice(idx, 1)
+  activeChannels.value.unshift(channel)
+  await saveOrder()
+}
+
+// 置底渠道
+const moveChannelToBottom = async (channelIndex: number) => {
+  if (isSavingOrder.value) return
+  const idx = activeChannels.value.findIndex(ch => ch.index === channelIndex)
+  if (idx < 0 || idx >= activeChannels.value.length - 1) return
+
+  const [channel] = activeChannels.value.splice(idx, 1)
+  activeChannels.value.push(channel)
+  await saveOrder()
 }
 
 // 设置渠道状态

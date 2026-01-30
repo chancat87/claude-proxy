@@ -114,3 +114,9 @@ log.Printf("[Component] 警告: 消息内容")
 2. Priority 字段排序
 3. Trace 亲和性绑定
 4. 熔断状态过滤
+
+## 工具使用注意事项
+
+**Edit 工具与 Tab 缩进**:
+- Go 文件使用 tab 缩进，`Edit` 工具匹配时可能因空白字符差异失败
+- 失败时可用 `sed -i '' 's/old/new/g' file.go` 替代
